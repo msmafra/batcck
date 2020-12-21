@@ -29,7 +29,7 @@ set -o xtrace
 #}}}
 main() {
     trap exit_stage_left EXIT ERR # Elegant exit
-    if [[ "${EUID}" != 0 ]];then
+    if [[ "${EUID}" -eq 0 ]];then
         create_cron_job
     fi
     check_battery_status
