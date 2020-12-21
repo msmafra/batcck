@@ -113,7 +113,7 @@ create_cron_job() {
         printf "%s" "Already set"
     else
         \tee --append --ignore-interrupts "${job_path}${user_issued}" <<CRONBAT
-* * * * * /home/${user_issued}/Projects/batcck >/dev/null 2>&1
+* * * * * /home/${user_issued}/Projects/batcck/batcck >/dev/null 2>&1
 CRONBAT
     fi
 
