@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# Battery Capacity/Charge Check (batcck)
+# A personal bash script to check laptops battery charge status to avoid abrupt
+# shutdown on my laptop with Fedora.
+# The script checks every n time, set via crontab -e, if the battery status is
+# "Discharging". Once it is stabilished the current capacity  is obtained of the
+# laptop's battery at the time and alerts first at the value set in the
+# percentage_warning variable to the plug the laptop's DC adapter.
+# If percentage_suspend is reached while discharging the critical_action is ran.
+# nottify-send and doas are required for this one to work
+# notify-send to show the messages
+# doas with nopass policy
+# /usr/local/etc/doas.conf
+# permit nopass $USER as root
+# TODO
+# 1. Generate crontab line in /var/spool/cron/USERNAME (??);
+# 2. Get username and put config inside home folder (??):
+# percentage_warning=90
+# percentage_suspend=81
+# 3. Test mode: just show the warnings
+# 4. Log (??) discharging start time, critical percentage and suspend time
+# check /sys/class/power_supply/BAT# (??)
+#{{{
+set -o errexit
+set -o errtrace
+set -o nounset
+set -o pipefail
+set -o xtrace
+#}}}
+main() {
+    trap exit_stage_left EXIT ERR # Elegant exit
+    if [[ "${EUID}" != 0 ]];then
+        create_cron_job
+    fi
+    check_battery_status
+}
+
+exit_stage_left() {
+    local -i line_number
+    local -i error_number
+    line_number=${LINENO}
+    error_number=${?}
+    # ? gets the exit code if different from zero
+    if [ ${error_number} -ne 0 ];then
+        printf "So exit, Stage Left! %s %s" "${line_number}" "${error_number}"
+    fi
+}
+
+check_distro() {
+    local check_distro
+    check_distro="$(\awk -F"=" 'NR=2 {print $2}' /usr/lib/os-release | \head -lines=1)"
+    if [[ ! ${check_distro} = "Fedora" ]];then
+        printf "%s\n" "${check_distro}"
+        exit 1
+    fi
+}
+
+check_battery_status() {
+    local battery_status
+    local -i battery_capacity
+    local -i percentage_warning
+    local -i percentage_suspend
+    local -i sleep_time
+    local critical_action
+    # Getting battery status: Charging or Discharging
+    battery_status="$(\awk -F"=" 'NR=1 {print $1}' /sys/class/power_supply/BAT1/status)"
+    # Getting battery current charge capacity: 0-100
+    battery_capacity="$(\awk -F"=" 'NR=1 {print $1}' /sys/class/power_supply/BAT1/capacity)"
+    # Value for warning message default 15
+    percentage_warning=
+    # Value for the forceful action default 10
+    percentage_suspend=
+    # Time to wait beforce forcefull action default 10
+    sleep_time=
+    # systemctl suspend, poweroff, hibernate, hybrid-sleep
+    # hibernate and hybrid-sleep require a swap file or partition size at least equivalent to system's RAM
+    # cat /proc/meminfo | grep -E "MemTotal" | cut -d":" -f2 | awk -F" "  '{printf $1}'
+    # cat /proc/meminfo | grep -E "SwapTotal" | cut -d":" -f2 | awk -F" "  '{printf $1}'
+    critical_action="suspend"
+
+    # if [[ ${battery_status:-Discharging} =~ Charging|Discharging ]];then
+    #     if ! (( battery_capacity %5 ));then
+    #         \notify-send --urgency=critical "Battery at ${battery_capacity}%." --icon='battery-caution'
+    #     fi
+    # fi
+
+    if [[ ${battery_status} = "Discharging" ]];then
+        if [[ ${battery_capacity} -lt ${percentage_warning:-15} && ${battery_capacity} -ge ${percentage_suspend:-10} ]];then
+
+            \notify-send --urgency=critical "$(date +%H:%M:%S)" "Battery at ${battery_capacity}%. Plug it again." --icon='battery-caution'
+
+        elif [[ ${battery_capacity} -le ${percentage_suspend:-10} ]];then
+
+            \notify-send --urgency=critical "$(date +%H:%M:%S)" "Battery at ${battery_capacity}%. Action in ${sleep_time:-10} seconds." --icon='battery-caution'
+            \sleep "${sleep_time:-10}"s
+            if [[ ${battery_status} = "Discharging" ]];then
+                \doas systemctl "${critical_action:-suspend}" --ignore-inhibitors #--dry-run
+            fi
+
+        else
+            printf "%s\n" "..."
+        fi
+    fi
+}
+
+create_cron_job() {
+    local user_issued
+    local job_path
+    user_issued="$(\logname)"
+    job_path="/var/spool/cron/"
+
+    if \grep --extended-regexp --word-regexp --recursive "batcck" "${job_path}${user_issued}";then
+        printf "%s" "Already set"
+    else
+        \tee --append --ignore-interrupts "${job_path}${user_issued}" <<CRONBAT
+* * * * * /home/${user_issued}/Projects/batcck >/dev/null 2>&1
+CRONBAT
+    fi
+
+    \crontab -u "${user_issued}" -l
+    sleep 1s
+    \crontab -u "${user_issued}" -e
+
+}
+
+main "${@}"
