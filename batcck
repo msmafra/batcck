@@ -7,11 +7,7 @@
 # laptop's battery at the time and alerts first at the value set in the
 # percentage_warning variable to the plug the laptop's DC adapter.
 # If percentage_suspend is reached while discharging the critical_action is ran.
-# nottify-send and doas are required for this one to work
-# notify-send to show the messages
-# doas with nopass policy
-# /usr/local/etc/doas.conf
-# permit nopass $USER as root
+# nottify-send and doas are re
 # TODO
 # 1. Generate crontab line in /var/spool/cron/USERNAME (??);
 # 2. Get username and put config inside home folder (??):
@@ -63,15 +59,15 @@ check_battery_status() {
     local -i sleep_time
     local critical_action
     # Getting battery status: Charging or Discharging
-    battery_status="$(\awk -F"=" 'NR=1 {print $1}' /sys/class/power_supply/BAT1/status)"
+    battery_status="$(\awk -F"=" 'NR=1 {print $1}' /sys/class/power_supply/BAT[0-9]/status)"
     # Getting battery current charge capacity: 0-100
-    battery_capacity="$(\awk -F"=" 'NR=1 {print $1}' /sys/class/power_supply/BAT1/capacity)"
+    battery_capacity="$(\awk -F"=" 'NR=1 {print $1}' /sys/class/power_supply/BAT[0-9]/capacity)"
     # Value for warning message default 15
-    percentage_warning=
+    percentage_warning=15
     # Value for the forceful action default 10
-    percentage_suspend=
+    percentage_suspend=10
     # Time to wait beforce forcefull action default 10
-    sleep_time=
+    sleep_time=10
     # systemctl suspend, poweroff, hibernate, hybrid-sleep
     # hibernate and hybrid-sleep require a swap file or partition size at least equivalent to system's RAM
     # cat /proc/meminfo | grep -E "MemTotal" | cut -d":" -f2 | awk -F" "  '{printf $1}'
